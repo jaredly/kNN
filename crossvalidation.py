@@ -5,14 +5,12 @@ import numpy as np
 from kNN import NearestNeighbor
 from pandas import DataFrame, concat
 
-
 def nfold_arff(fname, num, target=None):
     data, meta = loadarff(fname)
     if target is None:
         target = meta.names()[-1]
     data = DataFrame(data)
     return nfold(meta, data, target, num)
-
 
 def nfold(meta, data, target, num=10):
     total = len(data)
