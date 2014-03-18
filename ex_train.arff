@@ -1,0 +1,10 @@
+@relation mine
+@attribute x real
+@attribute y real
+@attribute class {red, green}
+@data
+0,0,red
+10,10,green
+0,10,red
+10,0,green
+

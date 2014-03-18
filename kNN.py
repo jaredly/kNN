@@ -23,8 +23,7 @@ from numpy import array
 import numpy
 import docopt
 
-def dist(one, two):
-    return numpy.linalg.norm(two - one)
+DEBUG = False
 
 class NearestNeighbor:
     def __init__(self, meta, data, target, k=3, distance=False):
@@ -32,60 +31,46 @@ class NearestNeighbor:
         self.meta = meta
         self.target = target
         self.distance = distance
-        self.k = k
 
-    def run(self):
-        return False
-
-    def classify(self, item):
-        neighbors = []
-
-        trains = self.data[goods]
-        for i in trains.index:
-            neighbors.append((dist(trains.loc[i], item[goods]), self.data.loc[i][self.target]))
-            print ',',
-        neighbors.sort()
-        nearest = neighbors[-self.k:]
-        items = {}
-        for d,x in nearest:
-            if x not in items:
-                items[x] = 0
-            items[x] += 1
-        its = items.items()
-        its.sort(lambda (a,b),(c,d): d - b)
-        return its[0][0]
-
-    def validate(self, data):
-        '''Returns accuracy?'''
-        wrong = 0
+    def calc(self, data):
         goods = list(self.data.columns)
         goods.remove(self.target)
         print 'valid'
         import time
         start = time.time()
+
         # dists is a len(data) x len(self.data) matrix
-        dists = DataFrame(cdist(array(data[goods]), array(self.data[goods]), 'euclidean'))
+        dists = DataFrame(cdist(array(self.data[goods]), array(data[goods]), 'euclidean'))
         print time.time() - start
         print 'doneval'
+        if DEBUG:print dists
+        self.dists = dists
+
+    def validate(self, data, ninstances):
+        '''Returns accuracy?'''
+        wrong = 0
 
         for i in data.index:
-            dlist = dists[i].copy()
+            dlist = self.dists[i].copy()
             dlist.sort()
 
             votes = {}
-            for ix in range(-self.k, 0):
+            if DEBUG:print dlist.index
+            if DEBUG:print dlist
+            for ix in range(0, ninstances):
                 cls = self.data.loc[dlist.index[ix]][self.target]
+                if DEBUG:print ix, dlist.index[ix], cls
                 if not cls in votes:
-                    votes[cls] = (1/dlist.loc[ix]) if self.distance else 1
+                    votes[cls] = (1/dlist.loc[dlist.index[ix]]**2) if self.distance else 1
                 else:
-                    votes[cls] += (1/dlist.loc[ix]) if self.distance else 1
+                    votes[cls] += (1/dlist.loc[dlist.index[ix]]**2) if self.distance else 1
             most = None
             for k, v in votes.iteritems():
                 if most is None or v > most[1]:
                     most = k, v
 
             cls = most[0]
-            # print votes
+            if DEBUG:print votes
 
             # item = data.loc[i]
             # cls = self.classify(item)
@@ -97,8 +82,8 @@ class NearestNeighbor:
         print wrong, len(data)
         return wrong / float(len(data))
 
-def norms(one, two):
-    for c in one.columns:
+def norms(one, two, cols):
+    for c in cols:
         mn = min([one[c].min(), two[c].min()])
         mx = max([one[c].max(), two[c].max()])
         one[c] -= mn
@@ -106,21 +91,36 @@ def norms(one, two):
         two[c] -= mn
         two[c] /= mx - mn
 
-def main(k=3, normalize=False, distance=True, base='mt_'):
+def main(k=3, normalize=False, distance=True, base='mt_', ks=[]):
     train, mtrain = loadarff(base + 'train.arff')
     train = DataFrame(train)
     test, mtest = loadarff(base + 'test.arff')
     test = DataFrame(test)
 
-    if normalize:
-        norms(test, train)
+    cols = [col for col in mtrain.names() if mtrain[col][0] == 'numeric']
 
-    learner = NearestNeighbor(mtrain, train, mtrain.names()[-1], k=k, distance=distance)
+    if normalize:
+        norms(test, train, cols)
+
+    learner = NearestNeighbor(mtrain, train, mtrain.names()[-1], distance=distance)
+    learner.calc(test)
     import time
-    print 'testing'
+    print 'testing', [k]
     start = time.time()
-    print learner.validate(test)
+    err = learner.validate(test, k)
+    print 'Err:', err, 'Acc:', 1-err
     print 'Time', time.time() - start
+    if not ks: return err
+    errs = {}
+    errs[k] = err
+    for ok in ks:
+        print 'testing'
+        start = time.time()
+        err = learner.validate(test, ok)
+        print 'Err:', err, 'Acc:', 1-err
+        print 'Time', time.time() - start
+        errs[ok] = err
+    return errs
 
 if __name__ == '__main__':
     args = docopt.docopt(__doc__, version='kNN 1.0')
