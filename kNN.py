@@ -55,17 +55,25 @@ class NearestNeighbor:
             dlist = self.dists[i].copy()
             dlist.sort()
 
-            weighted = 0
-            weights = 0
-            if DEBUG:print dlist.index
-            if DEBUG:print dlist
-            for ix in range(0, ninstances):
-                val = self.data.loc[dlist.index[ix]][self.target]
-                d2i = 1/dlist.loc[dlist.index[ix]]**2
-                weighted += val * d2i
-                weights += d2i
+            if self.distance:
+                weighted = 0
+                weights = 0
+                if DEBUG:print dlist.index
+                if DEBUG:print dlist
+                for ix in range(0, ninstances):
+                    val = self.data.loc[dlist.index[ix]][self.target]
+                    d2i = 1/dlist.loc[dlist.index[ix]]**2
+                    weighted += val * d2i
+                    weights += d2i
 
-            should = weighted / weights
+                should = weighted / weights
+
+            else:
+                total = 0
+                for ix in range(0, ninstances):
+                    total += self.data.loc[dlist.index[ix]][self.target]
+
+                should = total / ninstances
 
             sse += (data.loc[i][self.target] - should)**2
 
@@ -106,7 +114,7 @@ class NearestNeighbor:
                 # print cls, data.loc[i][self.target]
             # print '.',
             # if i > 20:break
-        print wrong, len(data)
+        # print wrong, len(data)
         return wrong / float(len(data))
 
 def norms(one, two, cols):
@@ -118,7 +126,7 @@ def norms(one, two, cols):
         two[c] -= mn
         two[c] /= mx - mn
 
-def main(k=3, normalize=False, distance=True, base='mt_', ks=[]):
+def main(k=3, normalize=False, distance=True, base='mt_', ks=[], regress=False):
     train, mtrain = loadarff(base + 'train.arff')
     train = DataFrame(train)
     test, mtest = loadarff(base + 'test.arff')
@@ -131,19 +139,22 @@ def main(k=3, normalize=False, distance=True, base='mt_', ks=[]):
 
     learner = NearestNeighbor(mtrain, train, mtrain.names()[-1], distance=distance)
     learner.calc(test)
+
+    tester = learner.regress if regress else learner.validate
+
     import time
     print 'testing', [k]
     start = time.time()
-    err = learner.validate(test, k)
+    err = tester(test, k)
     print 'Err:', err, 'Acc:', 1-err
     print 'Time', time.time() - start
     if not ks: return err
     errs = {}
     errs[k] = err
     for ok in ks:
-        print 'testing'
+        print 'testing', ok
         start = time.time()
-        err = learner.validate(test, ok)
+        err = tester(test, ok)
         print 'Err:', err, 'Acc:', 1-err
         print 'Time', time.time() - start
         errs[ok] = err
