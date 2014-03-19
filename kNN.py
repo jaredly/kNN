@@ -25,6 +25,99 @@ import docopt
 
 DEBUG = False
 
+def reuse_recycle(target, data, number, distance=False):
+    '''recycle'''
+    goods = list(data.columns)
+    goods.remove(target)
+    dists = DataFrame(cdist(array(data[goods]), array(data[goods]), 'euclidean'))
+    remove = []
+    for i in dists.index:
+        dlist = dists[i].copy()
+        dlist.sort()
+
+        votes = {}
+        if DEBUG:print dlist.index
+        if DEBUG:print dlist
+
+        look = number
+        ix = 0
+        while look > 0:
+            ix -= 1
+            if dlist.index[ix] in remove:
+                continue
+            cls = data.iloc[dlist.index[ix]][target]
+            if DEBUG:print ix, dlist.index[ix], cls
+            if not cls in votes:
+                votes[cls] = (1/dlist.loc[dlist.index[ix]]**2) if distance else 1
+            else:
+                votes[cls] += (1/dlist.loc[dlist.index[ix]]**2) if distance else 1
+            look -= 1
+        most = None
+        for k, v in votes.iteritems():
+            if most is None or v > most[1]:
+                most = k, v
+
+        cls = most[0]
+        if DEBUG:print votes
+
+        # item = data.loc[i]
+        # cls = self.classify(item)
+        if data.loc[i][target] == cls:
+            remove.append(i)
+
+    print 'removed', len(remove)
+    return remove
+
+
+def reduce_regress(target, data, k, distance=False, maxerr=.1):
+    '''recycle'''
+    goods = list(data.columns)
+    goods.remove(target)
+    dists = DataFrame(cdist(array(data[goods]), array(data[goods]), 'euclidean'))
+    remove = []
+    for i in dists.index:
+        dlist = dists[i].copy()
+        dlist.sort()
+
+        if distance:
+            weighted = 0
+            weights = 0
+            if DEBUG:print dlist.index
+            if DEBUG:print dlist
+            look = k
+            ix = 0
+            while look > 0:
+                ix -= 1
+                if dlist.index[ix] in remove:
+                    continue
+                val = data.loc[dlist.index[ix]][target]
+                d2i = 1/dlist.loc[dlist.index[ix]]**2
+                weighted += val * d2i
+                weights += d2i
+                look -= 1
+
+            should = weighted / weights
+
+        else:
+            total = 0
+            look = k
+            ix = 0
+            while look > 0:
+                ix -= 1
+                if dlist.index[ix] in remove:
+                    continue
+                total += data.loc[dlist.index[ix]][target]
+                look -= 1
+
+            should = total / ninstances
+
+        err = (data.loc[i][target] - should)**2
+        if err < maxerr:
+            remove.append(i)
+
+    print 'removed', len(remove)
+    return remove
+
 class NearestNeighbor:
     def __init__(self, meta, data, target, k=3, distance=False):
         self.data = data
@@ -61,7 +154,7 @@ class NearestNeighbor:
                 if DEBUG:print dlist.index
                 if DEBUG:print dlist
                 for ix in range(0, ninstances):
-                    val = self.data.loc[dlist.index[ix]][self.target]
+                    val = self.data.iloc[dlist.index[ix]][self.target]
                     d2i = 1/dlist.loc[dlist.index[ix]]**2
                     weighted += val * d2i
                     weights += d2i
@@ -93,7 +186,7 @@ class NearestNeighbor:
             if DEBUG:print dlist.index
             if DEBUG:print dlist
             for ix in range(0, ninstances):
-                cls = self.data.loc[dlist.index[ix]][self.target]
+                cls = self.data.iloc[dlist.index[ix]][self.target]
                 if DEBUG:print ix, dlist.index[ix], cls
                 if not cls in votes:
                     votes[cls] = (1/dlist.loc[dlist.index[ix]]**2) if self.distance else 1
@@ -126,7 +219,7 @@ def norms(one, two, cols):
         two[c] -= mn
         two[c] /= mx - mn
 
-def main(k=3, normalize=False, distance=True, base='mt_', ks=[], regress=False):
+def main(k=3, normalize=False, distance=True, base='mt_', ks=[], regress=False, recycle=False, maxerr=.1):
     train, mtrain = loadarff(base + 'train.arff')
     train = DataFrame(train)
     test, mtest = loadarff(base + 'test.arff')
@@ -137,7 +230,22 @@ def main(k=3, normalize=False, distance=True, base='mt_', ks=[], regress=False):
     if normalize:
         norms(test, train, cols)
 
-    learner = NearestNeighbor(mtrain, train, mtrain.names()[-1], distance=distance)
+    target = mtrain.names()[-1]
+    if recycle:
+        print len(train)
+        if regress:
+            removed = reduce_regress(target, train, k, True, maxerr=maxerr)
+        else:
+            removed = reuse_recycle(target, train, k, True)
+        # print removed
+        ixs = list(train.index)
+        for n in removed:
+            ixs.remove(n)
+        train = train.loc[ixs]
+        print len(train)
+        # print train.index
+
+    learner = NearestNeighbor(mtrain, train, target, distance=distance)
     learner.calc(test)
 
     tester = learner.regress if regress else learner.validate
