@@ -46,6 +46,33 @@ class NearestNeighbor:
         if DEBUG:print dists
         self.dists = dists
 
+    def regress(self, data, ninstances):
+        '''Returns accuracy?'''
+
+        sse = 0 # sum squared error
+
+        for i in data.index:
+            dlist = self.dists[i].copy()
+            dlist.sort()
+
+            weighted = 0
+            weights = 0
+            if DEBUG:print dlist.index
+            if DEBUG:print dlist
+            for ix in range(0, ninstances):
+                val = self.data.loc[dlist.index[ix]][self.target]
+                d2i = 1/dlist.loc[dlist.index[ix]]**2
+                weighted += val * d2i
+                weights += d2i
+
+            should = weighted / weights
+
+            sse += (data.loc[i][self.target] - should)**2
+
+        print sse, len(data)
+        return sse / float(len(data))
+
+
     def validate(self, data, ninstances):
         '''Returns accuracy?'''
         wrong = 0
